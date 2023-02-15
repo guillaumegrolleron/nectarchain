@@ -34,6 +34,56 @@ from abc import abstractclassmethod
 
 __all__ = ["NectarGainSPESingleSignalStd","NectarGainSPESingleSignal","NectarGainSPESinglePed","NectarGainSPESingleSignalfromHHVFit"]
 
+def run_fit(funct,parameters,pixels_id,prescan = False,**kwargs) :
+    ncall = kwargs.get('ncall',400000)
+    minuitParameters = UtilsMinuit.make_minuit_par_kwargs(parameters.unfrozen)
+    fit = Minuit(funct,**minuitParameters['values'])
+    UtilsMinuit.set_minuit_parameters_limits_and_errors(fit,minuitParameters)
+    log.info(f"Initial value of Likelihood = {funct(**minuitParameters['values'])}")
+    log.info(f"Initial parameters value : {fit.values}")
+    #log.debug(self.Chi2(pixel)(0.5,500,14600,50,1))
+    if log.getEffectiveLevel() == logging.ERROR :
+        fit.print_level = 0
+    if log.getEffectiveLevel() == logging.WARNING :
+        fit.print_level = 1
+    if log.getEffectiveLevel() == logging.INFO :
+        fit.print_level = 2
+    if log.getEffectiveLevel() == logging.DEBUG :
+        fit.print_level = 3
+    
+    fit.strategy = 2
+    fit.throw_nan = True
+    if prescan : 
+        log.info("let's do a fisrt brut force scan") 
+        fit.scan()
+    try : 
+        log.info('migrad execution')
+        fit.migrad(ncall=ncall)
+        fit.hesse()
+        valid = fit.valid
+    except RuntimeError as e : 
+        log.warning(e,exc_info = True)
+        log.info("change method : re-try with simplex")
+        fit.reset()
+        fit.throw_nan = True
+        if prescan : 
+            log.info("let's do a fisrt brut force scan") 
+            fit.scan()
+        try :
+            log.info('simplex execution')
+            fit.simplex(ncall=ncall)
+            fit.hesse()
+            valid = fit.valid
+        except Exception as e :
+            log.error(e,exc_info = True)
+            log.warning(f"skip pixel_id : {pixels_id})")
+            valid = False
+    except Exception as e :
+        log.error(e,exc_info = True)
+        raise e
+    return fit,valid
+
+    
 
 class NectarGainSPESingle(NectarGainSPE):
     _Ncall = 4000000
@@ -87,57 +137,7 @@ class NectarGainSPESingle(NectarGainSPE):
         self._output_table.meta['npixel'] = self.npixels
         self._output_table.meta['comments'] = f'Produced with NectarGain, Credit : CTA NectarCam {date.today().strftime("%B %d, %Y")}'
 
-    @staticmethod
-    def _run_fit(funct,parameters,pixels_id,prescan = False,**kwargs) :
-        minuitParameters = UtilsMinuit.make_minuit_par_kwargs(parameters.unfrozen)
-        fit = Minuit(funct,**minuitParameters['values'])
-        UtilsMinuit.set_minuit_parameters_limits_and_errors(fit,minuitParameters)
-        log.info(f"Initial value of Likelihood = {funct(**minuitParameters['values'])}")
-        log.info(f"Initial parameters value : {fit.values}")
-        #log.debug(self.Chi2(pixel)(0.5,500,14600,50,1))
-
-        if log.getEffectiveLevel() == logging.ERROR :
-            fit.print_level = 0
-        if log.getEffectiveLevel() == logging.WARNING :
-            fit.print_level = 1
-        if log.getEffectiveLevel() == logging.INFO :
-            fit.print_level = 2
-        if log.getEffectiveLevel() == logging.DEBUG :
-            fit.print_level = 3
-        
-        fit.strategy = 2
-        fit.throw_nan = True
-        if prescan : 
-            log.info("let's do a fisrt brut force scan") 
-            fit.scan()
-        try : 
-            log.info('migrad execution')
-            fit.migrad(ncall=super(__class__,__class__)._Ncall)
-            fit.hesse()
-            valid = fit.valid
-        except RuntimeError as e : 
-            log.warning(e,exc_info = True)
-            log.info("change method : re-try with simplex")
-            fit.reset()
-            fit.throw_nan = True
-            if prescan : 
-                log.info("let's do a fisrt brut force scan") 
-                fit.scan()
-            try :
-                log.info('simplex execution')
-                fit.simplex(ncall=super(__class__,__class__)._Ncall)
-                fit.hesse()
-                valid = fit.valid
-            except Exception as e :
-                log.error(e,exc_info = True)
-                log.warning(f"skip pixel_id : {pixels_id})")
-                valid = False
-
-        except Exception as e :
-            log.error(e,exc_info = True)
-            raise e
-
-        return fit,valid
+    
         
     def run(self,pixel : int = None,multiproc = False, **kwargs):
         def task_simple(i,**kwargs) : 

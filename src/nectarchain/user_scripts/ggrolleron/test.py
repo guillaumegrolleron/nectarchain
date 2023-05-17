@@ -16,6 +16,8 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 log.addHandler(handler)
 
+import glob
+
 
 
 from nectarchain.calibration.container import ChargeContainer,WaveformsContainer,WaveformsContainers,ChargeContainers
@@ -68,16 +70,16 @@ def test_simplecontainer() :
 
     charge = ChargeContainer.compute_charge(spe_run_1000V,1,method = "gradient_extractor")
 
-charge = ChargeContainer.from_waveforms(wfs, method = "SlidingWindowMaxSum", window_width = 16, window_shift = 4)
-log.info(f"SlidingWindowMaxSum duration : {time.time() - t} seconds")
+    charge = ChargeContainer.from_waveforms(wfs, method = "SlidingWindowMaxSum", window_width = 16, window_shift = 4)
+    log.info(f"SlidingWindowMaxSum duration : {time.time() - t} seconds")
 
-#charge = ChargeContainer.from_waveforms(wfs, method = "NeighborPeakWindowSum", window_width = 16, window_shift = 4)
-#log.info(f"NeighborPeakWindowSum duration : {time.time() - t} seconds")
+    #charge = ChargeContainer.from_waveforms(wfs, method = "NeighborPeakWindowSum", window_width = 16, window_shift = 4)
+    #log.info(f"NeighborPeakWindowSum duration : {time.time() - t} seconds")
 
     charge = ChargeContainer.from_waveform(spe_run_1000V)
 
-charge = ChargeContainer.from_waveforms(wfs, method = "TwoPassWindowSum", window_width = 16, window_shift = 4)
-log.info(f"TwoPassWindowSum duration : {time.time() - t} seconds")
+    charge = ChargeContainer.from_waveforms(wfs, method = "TwoPassWindowSum", window_width = 16, window_shift = 4)
+    log.info(f"TwoPassWindowSum duration : {time.time() - t} seconds")
 
     charge.write(f"{os.environ['NECTARCAMDATA']}/charges/std/",overwrite = True)
 

@@ -16,6 +16,7 @@ formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(messag
 handler.setFormatter(formatter)
 log.addHandler(handler)
 
+#sys.path.append("/home/ggroller/projects/nectarchain/src/nectarchain")
 import glob
 
 
@@ -66,6 +67,8 @@ def test_extractor() :
     t = time.time()
     charge = ChargeContainer.from_waveforms(wfs, method = "LocalPeakWindowSum", window_width = 16, window_shift = 4)
     log.info(f"LocalPeakWindowSum duration : {time.time() - t} seconds")
+    charge = ChargeContainers.from_waveforms(wfs,method = "LocalPeakWindowSum", window_width = 16, window_shift = 4)
+    log.info("charge computed")
 
     charge = ChargeContainer.from_waveforms(wfs, method = "GlobalPeakWindowSum", window_width = 16, window_shift = 4)
     log.info(f"GlobalPeakWindowSum duration : {time.time() - t} seconds")
@@ -88,6 +91,34 @@ def test_extractor() :
     charge = ChargeContainer.from_waveforms(wfs, method = "TwoPassWindowSum", window_width = 16, window_shift = 4)
     log.info(f"TwoPassWindowSum duration : {time.time() - t} seconds")
 
+
+def test_white_target() :
+    run_number = [4129]
+    waveforms = WaveformsContainers(run_number[0],max_events=10000)
+    log.info("waveforms created")
+    waveforms.load_wfs()
+    log.info("waveforms loaded")
+    
+    #waveforms.write(f"{os.environ['NECTARCAMDATA']}/waveforms/",overwrite = True)
+    #log.info('waveforms written')
+
+    #waveforms = WaveformsContainers.load(f"{os.environ['NECTARCAMDATA']}/waveforms/waveforms_run{run_number[0]}")
+    #log.info("waveforms loaded")
+
+    charge = ChargeContainers.from_waveforms(waveforms,method = "LocalPeakWindowSum", window_width = 16, window_shift = 4)
+    log.info("charge computed")
+    
+    path = "LocalPeakWindowSum_4-12"
+    #charge.write(f"{os.environ['NECTARCAMDATA']}/charges/{path}/",overwrite = True)
+    #log.info("charge written")
+
+    #charge = ChargeContainers.from_file(f"{os.environ['NECTARCAMDATA']}/charges/{path}/",run_number = run_number[0])
+    #log.info("charge loaded")
+
+    #charge_merged = charge.merge()
+    #log.info('charge merged')
+
+
     #charge.write(f"{os.environ['NECTARCAMDATA']}/charges/std/",overwrite = False)
 
 
@@ -100,22 +131,23 @@ def test_simplecontainer() :
 
     spe_run_1000V.load_wfs()
 
-    spe_run_1000V.write(f"{os.environ['NECTARCAMDATA']}/waveforms/",overwrite = True)
+    #spe_run_1000V.write(f"{os.environ['NECTARCAMDATA']}/waveforms/",overwrite = True)
 
-    spe_run_1000V.load(f"{os.environ['NECTARCAMDATA']}/waveforms/waveforms_run{run_number[0]}.fits")
+    #spe_run_1000V.load(f"{os.environ['NECTARCAMDATA']}/waveforms/waveforms_run{run_number[0]}.fits")
 
-    charge = ChargeContainer.compute_charge(spe_run_1000V,1,method = "gradient_extractor")
-
-
-
-    charge = ChargeContainer.from_waveform(spe_run_1000V)
+    charge = ChargeContainer.compute_charge(spe_run_1000V,1,method = "LocalPeakWindowSum",extractor_kwargs = {'window_width' : 16, 'window_shift' : 4})
 
 
-    charge.write(f"{os.environ['NECTARCAMDATA']}/charges/std/",overwrite = True)
+
+    charge = ChargeContainer.from_waveforms(spe_run_1000V)
+
+
+    #charge.write(f"{os.environ['NECTARCAMDATA']}/charges/std/",overwrite = True)
 
 
 
 if __name__ == "__main__" : 
-    test_check_wfs()
+    #test_multicontainers()
+    test_white_target()
 
     print("work completed")

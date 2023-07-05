@@ -40,7 +40,7 @@ class WaveformsContainer() :
         obj = object.__new__(cls)
         return obj
 
-    def __init__(self,run_number : int,max_events : int = None,nevents : int = -1,run_file = None):
+    def __init__(self,run_number : int,max_events : int = None,nevents : int = -1,run_file = None, init_arrays : bool = False):
         """construtor
 
         Args:
@@ -52,7 +52,9 @@ class WaveformsContainer() :
         """
 
         self.__run_number = run_number
-        #gerer ici le fait de traiter plusieurs fichiers ou simplement 1 par 1
+        self.__run_file = run_file
+        self.__max_events = max_events
+
         self.__reader = WaveformsContainer.load_run(run_number,max_events,run_file = run_file)
 
         #from reader members
@@ -68,12 +70,20 @@ class WaveformsContainer() :
         #run properties
         if nevents != -1 :
             self.__nevents = nevents if max_events is None else min(max_events,nevents) #self.check_events()
+            self.__reader = None
         else :
             self.__nevents = self.check_events()
-            #reload file (bc check_events has drained reader generator)
-            self.__reader = WaveformsContainer.load_run(run_number,max_events,run_file = run_file)
+            
         log.info(f"N_events : {self.nevents}")
 
+        if init_arrays : 
+            self.__init_arrays()
+            
+    def __init_arrays(self,**kwargs) : 
+        log.debug('creation of the EventSource reader')
+        self.__reader = WaveformsContainer.load_run(self.__run_number,self.__max_events,run_file = self.__run_file)
+        
+        log.debug("create wfs, ucts, event properties and triger pattern arrays")
         #define zeros members which will be filled therafter
         self.wfs_hg = np.zeros((self.nevents,self.npixels,self.nsamples),dtype = np.uint16)
         self.wfs_lg = np.zeros((self.nevents,self.npixels,self.nsamples),dtype = np.uint16)
@@ -86,20 +96,56 @@ class WaveformsContainer() :
         #self.trig_pattern = np.zeros((self.nevents,self.npixels),dtype = bool)
         #self.multiplicity = np.zeros((self.nevents,self.npixels),dtype = np.uint16)
 
+        self.__broken_pixels_hg = np.zeros((self.npixels),dtype = bool)
+        self.__broken_pixels_lg = np.zeros((self.npixels),dtype = bool)
+
+
+    def __compute_broken_pixels(self,**kwargs) : 
+        log.warning("computation of broken pixels is not yet implemented")
+        self.__broken_pixels_hg = np.zeros((self.npixels),dtype = bool)
+        self.__broken_pixels_lg = np.zeros((self.npixels),dtype = bool)
+
+    @staticmethod
+    def create_from_events_list(events_list : list,
+                                run_number : int,
+                                npixels : int,
+                                nsamples : int,
+                                subarray,
+                                pixels_id : int,
+                                ) : 
+        cls = WaveformsContainer.__new__(WaveformsContainer)
+
+        cls.__run_number =  run_number
+        cls.__nevents = len(events_list)
+        cls.__npixels = npixels
+        cls.__nsamples = nsamples
+        cls.__subarray = subarray
+        cls.__pixels_id = pixels_id
+
+
+        wfs_hg_tmp=np.zeros((npixels,nsamples),dtype = np.uint16)
+        wfs_lg_tmp=np.zeros((npixels,nsamples),dtype = np.uint16)
+        
+        for i, event in enumerate(events_list):
+            cls.fill_wfs_from_event(event,i,wfs_hg_tmp,wfs_lg_tmp)
+
+        cls.__compute_broken_pixels()
+
+
 
     @staticmethod
     def load_run(run_number : int,max_events : int = None, run_file = None) : 
         """Static method to load from $NECTARCAMDATA directory data for specified run with max_events
 
-        Args:
+        Args:self.__run_number = run_number
             run_number (int): run_id
             maxevents (int, optional): max of events to be loaded. Defaults to 0, to load everythings.
             merge_file (optional) : if True will load all fits.fz files of the run, else merge_file can be integer to select the run fits.fz file according to this number
         Returns:
             List[ctapipe_io_nectarcam.NectarCAMEventSource]: List of EventSource for each run files
         """
-        generic_filename,filenames = DataManagement.findrun(run_number)
         if run_file is None : 
+            generic_filename,_ = DataManagement.findrun(run_number)
             log.info(f"{str(generic_filename)} will be loaded")
             eventsource = NectarCAMEventSource(input_url=generic_filename,max_events=max_events)
         else :  
@@ -119,6 +165,7 @@ class WaveformsContainer() :
         previous_trigger = None
         n_events = 0
         for i,event in enumerate(self.__reader):
+            log.debug(f"events i has ID : {np.uint16(event.index.event_id)}")
             if previous_trigger is not None :
                 has_changed = (previous_trigger.value != event.trigger.event_type.value)
             previous_trigger = event.trigger.event_type
@@ -135,6 +182,9 @@ class WaveformsContainer() :
         Args:
             compute_trigger_patern (bool, optional): To recompute on our side the trigger patern. Defaults to False.
         """
+        if not(hasattr(self, "wfs_hg")) : 
+            self.__init_arrays()
+
         wfs_hg_tmp=np.zeros((self.npixels,self.nsamples),dtype = np.uint16)
         wfs_lg_tmp=np.zeros((self.npixels,self.nsamples),dtype = np.uint16)
 
@@ -142,28 +192,32 @@ class WaveformsContainer() :
         for i,event in enumerate(self.__reader):
             if i%100 == 0:
                 log.info(f"reading event number {i}")
+            self.fill_wfs_from_event(event,i,wfs_hg_tmp,wfs_lg_tmp)
 
-            self.event_id[i] = np.uint16(event.index.event_id)
-            self.ucts_timestamp[i]=event.nectarcam.tel[WaveformsContainer.TEL_ID].evt.ucts_timestamp
-            self.event_type[i]=event.trigger.event_type.value
-            self.ucts_busy_counter[i] = event.nectarcam.tel[WaveformsContainer.TEL_ID].evt.ucts_busy_counter
-            self.ucts_event_counter[i] = event.nectarcam.tel[WaveformsContainer.TEL_ID].evt.ucts_event_counter
-
-
-            self.trig_pattern_all[i] = event.nectarcam.tel[WaveformsContainer.TEL_ID].evt.trigger_pattern.T
-
-            for pix in range(self.npixels):
-                wfs_lg_tmp[pix]=event.r0.tel[0].waveform[1,self.pixels_id[pix]]
-                wfs_hg_tmp[pix]=event.r0.tel[0].waveform[0,self.pixels_id[pix]]
-
-            self.wfs_hg[i] = wfs_hg_tmp
-            self.wfs_lg[i] = wfs_lg_tmp
-
-
+        self.__compute_broken_pixels()
 
         #if compute_trigger_patern and np.max(self.trig_pattern) == 0:
         #    self.compute_trigger_patern()
 
+    def fill_wfs_from_event(self,
+                            event,
+                            i : int,
+                            wfs_hg_tmp : np.ndarray,
+                            wfs_lg_tmp : np.ndarray
+                            ) : 
+        self.event_id[i] = np.uint16(event.index.event_id)
+        self.ucts_timestamp[i]=event.nectarcam.tel[WaveformsContainer.TEL_ID].evt.ucts_timestamp
+        self.event_type[i]=event.trigger.event_type.value
+        self.ucts_busy_counter[i] = event.nectarcam.tel[WaveformsContainer.TEL_ID].evt.ucts_busy_counter
+        self.ucts_event_counter[i] = event.nectarcam.tel[WaveformsContainer.TEL_ID].evt.ucts_event_counter
+        self.trig_pattern_all[i] = event.nectarcam.tel[WaveformsContainer.TEL_ID].evt.trigger_pattern.T
+
+        for pix in range(self.npixels):
+            wfs_lg_tmp[pix]=event.r0.tel[0].waveform[1,self.pixels_id[pix]]
+            wfs_hg_tmp[pix]=event.r0.tel[0].waveform[0,self.pixels_id[pix]]
+
+        self.wfs_hg[i] = wfs_hg_tmp
+        self.wfs_lg[i] = wfs_lg_tmp
 
     def write(self,path : str, **kwargs) : 
         """method to write in an output FITS file the WaveformsContainer. Two files are created, one FITS representing the data
@@ -262,12 +316,26 @@ class WaveformsContainer() :
             table_trigger = hdul[4].data
             cls.trig_pattern_all = table_trigger["trig_pattern_all"]
 
+        cls.__compute_broken_pixels()
+
         return cls
 
     
 
     
-
+    def sort(self, method = 'event_id') : 
+        if method == 'event_id' :
+            index = np.argsort(self.event_id)
+            self.ucts_timestamp = self.ucts_timestamp[index]
+            self.ucts_busy_counter = self.ucts_busy_counter[index]
+            self.ucts_event_counter = self.ucts_event_counter[index]
+            self.event_type = self.event_type[index]
+            self.event_id = self.event_id[index] 
+            self.trig_pattern_all = self.trig_pattern_all[index]
+            self.wfs_hg = self.wfs_hg[index]
+            self.wfs_lg = self.wfs_lg[index]
+        else : 
+            raise ArgumentError(f"{method} is not a valid method for sorting")
 
     def compute_trigger_patern(self) : 
         """(preliminary) function to compute the trigger patern
@@ -345,6 +413,13 @@ class WaveformsContainer() :
         res = res.transpose(res.shape[1],res.shape[0],res.shape[2])
         return res
 
+
+    @property 
+    def _run_file(self) : return self.__run_file 
+
+    @property
+    def _max_events(self) : return self.__max_events
+
     @property
     def reader(self) : return self.__reader
 
@@ -369,7 +444,12 @@ class WaveformsContainer() :
     @property
     def run_number(self) : return self.__run_number
 
+    @property
+    def broken_pixels_hg(self) : return self.__broken_pixels_hg
 
+    @property
+    def broken_pixels_lg(self) : return self.__broken_pixels_lg
+    
     #physical properties
     @property
     def multiplicity(self) :  return np.uint16(np.count_nonzero(self.trig_pattern,axis = 1))
@@ -395,7 +475,7 @@ class WaveformsContainers() :
         obj = object.__new__(cls)
         return obj
     
-    def __init__(self,run_number : int,max_events : int = None) :
+    def __init__(self,run_number : int,max_events : int = None, init_arrays : bool = False) :
         """initialize the waveformsContainer list inside the main object
 
         Args:
@@ -407,7 +487,7 @@ class WaveformsContainers() :
         self.waveformsContainer = []
         self.__nWaveformsContainer = 0
         for i,file in enumerate(filenames) : 
-            self.waveformsContainer.append(WaveformsContainer(run_number,max_events=max_events,run_file=file))
+            self.waveformsContainer.append(WaveformsContainer(run_number,max_events=max_events,run_file=file, init_arrays= init_arrays))
             self.__nWaveformsContainer += 1
             if not(max_events is None) : max_events -= self.waveformsContainer[i].nevents
             log.info(f'WaveformsContainer number {i} is created')

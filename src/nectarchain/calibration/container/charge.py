@@ -34,6 +34,7 @@ from astropy.io import fits
 from numba import guvectorize, float64, int64, bool_
 
 from .waveforms import WaveformsContainer,WaveformsContainers
+from .utils import CtaPipeExtractor
 
 
 
@@ -130,6 +131,7 @@ class ChargeContainer() :
         self.event_type = np.zeros((self.nevents),dtype = np.uint8)
         self.event_id = np.zeros((self.nevents),dtype = np.uint16)
         self.trig_pattern_all = np.zeros((self.nevents,self.CAMERA.n_pixels,4),dtype = bool)
+
 
     @classmethod
     def from_waveforms(cls,waveformContainer : WaveformsContainer,method : str = "FullWaveformSum",**kwargs) : 
@@ -299,11 +301,12 @@ class ChargeContainer() :
 
         log.debug(f"Extracting charges with method {method} and extractor_kwargs {extractor_kwargs}")
         ImageExtractor = eval(method)(waveformContainer.subarray,**extractor_kwargs)
+
         if channel == constants.HIGH_GAIN:
-            out = np.array([ImageExtractor(waveformContainer.wfs_hg[i],waveformContainer.TEL_ID,channel) for i in range(len(waveformContainer.wfs_hg))]).transpose(1,0,2)
+            out = np.array([CtaPipeExtractor.get_image_peak_time(ImageExtractor(waveformContainer.wfs_hg[i],waveformContainer.TEL_ID,channel,waveformContainer.broken_pixels_hg)) for i in range(len(waveformContainer.wfs_hg))]).transpose(1,0,2)
             return out[0],out[1]
         elif channel == constants.LOW_GAIN:
-            out = np.array([ImageExtractor(waveformContainer.wfs_lg[i],waveformContainer.TEL_ID,channel) for i in range(len(waveformContainer.wfs_lg))]).transpose(1,0,2)
+            out = np.array([CtaPipeExtractor.get_image_peak_time(ImageExtractor(waveformContainer.wfs_lg[i],waveformContainer.TEL_ID,channel,waveformContainer.broken_pixels_lg)) for i in range(len(waveformContainer.wfs_lg))]).transpose(1,0,2)
             return out[0],out[1]
         else :
             raise ArgumentError(f"channel must be {constants.LOW_GAIN} or {constants.HIGH_GAIN}")
@@ -408,6 +411,23 @@ class ChargeContainer() :
         mask_contain_pixels_id = np.array([pixel in self.pixels_id for pixel in pixel_id],dtype = bool)
         for pixel in pixel_id[~mask_contain_pixels_id] : log.warning(f"You asked for pixel_id {pixel} but it is not present in this ChargeContainer, skip this one")
         return np.array([self.charge_lg.T[np.where(self.pixels_id == pixel)[0][0]] for pixel in pixel_id[mask_contain_pixels_id]]).T
+
+    def sort(self, method = 'event_id') : 
+        if method == 'event_id' :
+            log.info('sorting ChargeContaineur with event_id')
+            index = np.argsort(self.event_id)
+            self.ucts_timestamp = self.ucts_timestamp[index]
+            self.ucts_busy_counter = self.ucts_busy_counter[index]
+            self.ucts_event_counter = self.ucts_event_counter[index]
+            self.event_type = self.event_type[index]
+            self.event_id = self.event_id[index] 
+            self.trig_pattern_all = self.trig_pattern_all[index]
+            self.charge_hg = self.charge_hg[index] 
+            self.charge_lg = self.charge_lg[index] 
+            self.peak_hg = self.peak_hg[index]
+            self.peak_lg = self.peak_lg[index]
+        else : 
+            raise ArgumentError(f"{method} is not a valid method for sorting")
 
     @property
     def run_number(self) : return self._run_number
@@ -546,4 +566,7 @@ class ChargeContainers() :
         cls.event_type = np.concatenate([chargecontainer.event_type for chargecontainer in self.chargeContainers ])
         cls.event_id = np.concatenate([chargecontainer.event_id for chargecontainer in self.chargeContainers ])
         cls.trig_pattern_all = np.concatenate([chargecontainer.trig_pattern_all for chargecontainer in self.chargeContainers ],axis = 0)
+        
+        cls.sort()
+
         return cls

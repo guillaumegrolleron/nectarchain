@@ -35,10 +35,10 @@ class MeanCameraDisplay_HighLowGain(dqm_summary):
     def ProcessEvent(self, evt, noped):
         self.pixelBAD = evt.mon.tel[0].pixel_status.hardware_failing_pixels
         pixel = evt.nectarcam.tel[0].svc.pixel_ids
-        pixel21 = np.arange(0, 21, 1, dtype=int)
+        pixel21 = np.arange(0,21,1,dtype=int)
         pixel = list(pixel)
         pixel21 = list(pixel21)
-        pixels = np.concatenate([pixel21, pixel])
+        pixels = np.concatenate([pixel21,pixel])
 
         if evt.trigger.event_type.value == 32: #count peds 
             self.counter_ped += 1

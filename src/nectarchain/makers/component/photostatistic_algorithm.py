@@ -84,6 +84,12 @@ class PhotoStatisticAlgorithm(Component):
         out = {}
 
         FFped_intersection = np.intersect1d(Pedcharge.pixels_id, FFcharge.pixels_id)
+        if not any(SPE_result.is_valid):
+            e = RuntimeError(
+                "Any SPE result is valid, the PhotoStatisticAlgorithm can't be computed"
+            )
+            log.critical(e)
+            raise e
         SPEFFPed_intersection = np.intersect1d(
             FFped_intersection, SPE_result.pixels_id[SPE_result.is_valid]
         )

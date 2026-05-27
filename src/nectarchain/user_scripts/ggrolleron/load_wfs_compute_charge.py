@@ -197,15 +197,15 @@ if __name__ == "__main__":
     kwargs = copy.deepcopy(vars(args))
     kwargs["log_level"] = args.verbosity
 
-    if any("pydevd" in mod for mod in sys.modules):
-        kwargs["max_events"] = [1000]
-        kwargs["reload_wfs"] = False
-        kwargs["run_number"] = [6511]
-        kwargs["overwrite"] = True
-        kwargs["method"] = "LocalPeakWindowSum"
-        kwargs["extractor_kwargs"] = {"window_width": 10, "peak_search_window": 4}
-        kwargs["events_per_slice"] = 800
-        kwargs["log_level"] = "DEBUG"
+    #if any("pydevd" in mod for mod in sys.modules):
+    #    kwargs["max_events"] = [1000]
+    #    kwargs["reload_wfs"] = False
+    #    kwargs["run_number"] = [6511]
+    #    kwargs["overwrite"] = True
+    #    kwargs["method"] = "LocalPeakWindowSum"
+    #    kwargs["extractor_kwargs"] = {"window_width": 10, "peak_search_window": 4}
+    #    kwargs["events_per_slice"] = 800
+    #    kwargs["log_level"] = "DEBUG"
 
     os.makedirs(os.environ.get("NECTARCHAIN_LOG", "/tmp"), exist_ok=True)
     os.makedirs(
